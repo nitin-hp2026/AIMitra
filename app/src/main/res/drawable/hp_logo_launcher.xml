@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- White HP mark sized for adaptive-icon safe zone on solid blue background. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/hp_logo_white"
+    android:inset="18%" />
