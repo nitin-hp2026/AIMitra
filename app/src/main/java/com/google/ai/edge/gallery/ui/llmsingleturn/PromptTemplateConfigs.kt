@@ -60,16 +60,6 @@ enum class LengthType(val label: String) {
   LONG(label = "Long"),
 }
 
-enum class LanguageType(val label: String) {
-  CPP(label = "C++"),
-  JAVA(label = "Java"),
-  JAVASCRIPT(label = "JavaScript"),
-  KOTLIN(label = "Kotlin"),
-  PYTHON(label = "Python"),
-  SWIFT(label = "Swift"),
-  TYPESCRIPT(label = "TypeScript"),
-}
-
 enum class InputEditorLabel(val label: String) {
   TASK(label = "Task"),
   OUTPUT_TYPE(label = "Output"),
@@ -77,7 +67,6 @@ enum class InputEditorLabel(val label: String) {
   TONE(label = "Tone"),
   LENGTH(label = "Length"),
   STYLE(label = "Style"),
-  LANGUAGE(label = "Language"),
 }
 
 /** Text summarization styles (used when no PDF is attached). */
@@ -218,34 +207,6 @@ enum class PromptTemplateType(
       listOf(
         "The new Pixel phone features an advanced camera system with improved low-light performance and AI-powered editing tools. The display is brighter and more energy-efficient. It runs on the latest Tensor chip, offering faster processing and enhanced security features. Battery life has also been extended, providing all-day power for most users.",
         "Beginning this Friday, January 24, giant pandas Bao Li and Qing Bao are officially on view to the public at the Smithsonian’s National Zoo and Conservation Biology Institute (NZCBI). The 3-year-old bears arrived in Washington this past October, undergoing a quarantine period before making their debut. Under NZCBI’s new agreement with the CWCA, Qing Bao and Bao Li will remain in the United States for ten years, until April 2034, in exchange for an annual fee of \$1 million.",
-      ),
-  ),
-  CODE_SNIPPET(
-    label = "Learn and write code",
-    config =
-      PromptTemplateConfig(
-        inputEditors =
-          listOf(
-            PromptTemplateSingleSelectInputEditor(
-              label = InputEditorLabel.LANGUAGE.label,
-              options = LanguageType.entries.map { it.label },
-              defaultOption = LanguageType.JAVASCRIPT.label,
-            )
-          )
-      ),
-    genFullPrompt = { userInput, inputEditorValues ->
-      val language = inputEditorValues[InputEditorLabel.LANGUAGE.label] as? String ?: "JavaScript"
-      buildAnnotatedString {
-        withStyle(GEMINI_GRADIENT_STYLE) { append("Write a $language code snippet to ") }
-        append(userInput)
-      }
-    },
-    examplePrompts =
-      listOf(
-        "Create an alert box that says \"Hello, World!\"",
-        "Declare an immutable variable named 'appName' with the value \"AI Gallery\"",
-        "Print the numbers from 1 to 5 using a for loop.",
-        "Write a function that returns the square of an integer input.",
       ),
   ),
 }
