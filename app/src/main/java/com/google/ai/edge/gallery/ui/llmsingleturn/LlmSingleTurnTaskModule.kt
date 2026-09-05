@@ -25,7 +25,6 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.litertlm.Contents
 import dagger.Module
 import dagger.Provides
@@ -59,15 +58,7 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
     systemInstruction: Contents?,
     onDone: (String) -> Unit,
   ) {
-    LlmChatModelHelper.initialize(
-      context = context,
-      model = model,
-      taskId = task.id,
-      supportImage = false,
-      supportAudio = false,
-      onDone = onDone,
-      systemInstruction = systemInstruction,
-    )
+    onDone("")
   }
 
   override fun cleanUpModelFn(
@@ -76,7 +67,7 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: () -> Unit,
   ) {
-    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
+    onDone()
   }
 
   @Composable

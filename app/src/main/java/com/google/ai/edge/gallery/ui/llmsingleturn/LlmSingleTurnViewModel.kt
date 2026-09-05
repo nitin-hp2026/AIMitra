@@ -19,22 +19,16 @@ package com.google.ai.edge.gallery.ui.llmsingleturn
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.ai.edge.gallery.common.processLlmResponse
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.runtime.runtimeHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 private const val TAG = "AGLlmSingleTurnVM"
 
@@ -100,12 +94,6 @@ class LlmSingleTurnViewModel @Inject constructor() : ViewModel() {
       updateResponse(model = model, promptTemplateType = templateType, response = "")
 
       try {
-        // Wait for the model instance to be ready.
-        while (model.instance == null) {
-          delay(100)
-          if (cancelRequested) return@launch
-        }
-
         val priorOutputs = mutableListOf<String>()
         passes.forEachIndexed { index, pass ->
           if (cancelRequested) return@launch
@@ -140,50 +128,16 @@ class LlmSingleTurnViewModel @Inject constructor() : ViewModel() {
     isFinal: Boolean,
     postProcess: ((String) -> String)? = null,
   ): String {
-    // Reset the conversation so each pass is an independent single turn.
-    model.runtimeHelper.resetConversation(model = model, supportImage = false, supportAudio = false)
     delay(300)
-
-    return suspendCancellableCoroutine { cont ->
-      var response = ""
-      val finished = AtomicBoolean(false)
-      model.runtimeHelper.runInference(
-        model = model,
-        input = input,
-        resultListener = { partialResult: String, done: Boolean, _: String? ->
-          if (partialResult.isNotEmpty()) {
-            response = processLlmResponse(response = "$response$partialResult")
-            if (isFinal && !done) {
-              setPreparing(false)
-              updateResponse(model = model, promptTemplateType = templateType, response = response)
-            }
-          }
-          if (done) {
-            if (isFinal) {
-              setPreparing(false)
-              if (postProcess != null) {
-                response = postProcess(response)
-              }
-              updateResponse(model = model, promptTemplateType = templateType, response = response)
-            }
-            if (finished.compareAndSet(false, true) && cont.isActive) {
-              cont.resume(response)
-            }
-          }
-        },
-        cleanUpListener = {
-          if (finished.compareAndSet(false, true) && cont.isActive) {
-            cont.resume(response)
-          }
-        },
-        onError = { message: String ->
-          if (finished.compareAndSet(false, true) && cont.isActive) {
-            cont.resumeWithException(RuntimeException(message))
-          }
-        },
-        coroutineScope = viewModelScope,
-      )
+    var response = ""
+    if (isFinal) {
+      setPreparing(false)
+      if (postProcess != null) {
+        response = postProcess(response)
+      }
+      updateResponse(model = model, promptTemplateType = templateType, response = response)
     }
+    return response
   }
 
   fun selectPromptTemplate(model: Model, promptTemplateType: PromptTemplateType) {
@@ -227,7 +181,6 @@ class LlmSingleTurnViewModel @Inject constructor() : ViewModel() {
       setInProgress(false)
       setPreparing(false)
       setStatus("")
-      model.runtimeHelper.stopResponse(model)
     }
   }
 
