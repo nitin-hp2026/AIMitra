@@ -73,14 +73,12 @@ data class AllowedModel(
   val updateInfo: String? = null,
 ) {
   fun toModel(): Model {
-    // Construct HF download url.
     var version = commitHash
     var downloadedFileName = modelFile
     var downloadUrl =
       url ?: "https://huggingface.co/$modelId/resolve/$commitHash/$modelFile?download=true"
     var sizeInBytes = sizeInBytes
 
-    // Handle per-soc model files.
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       if (socToModelFiles?.isNotEmpty() == true) {
         socToModelFiles.get(SOC)?.let { info ->
@@ -95,14 +93,7 @@ data class AllowedModel(
       }
     }
 
-    // Config.
-    val isLlmModel =
-      taskTypes.contains(BuiltInTaskId.LLM_CHAT) ||
-        taskTypes.contains(BuiltInTaskId.LLM_PROMPT_LAB) ||
-        taskTypes.contains(BuiltInTaskId.LLM_ASK_AUDIO) ||
-        taskTypes.contains(BuiltInTaskId.LLM_ASK_IMAGE) ||
-        taskTypes.contains(BuiltInTaskId.LLM_MOBILE_ACTIONS) ||
-        taskTypes.contains(BuiltInTaskId.LLM_TINY_GARDEN)
+    val isLlmModel = taskTypes.contains(BuiltInTaskId.LLM_PROMPT_LAB)
     var configs: MutableList<Config> = mutableListOf()
     var llmMaxToken = 1024
     var llmMaxContextLength: Int? = null
@@ -137,7 +128,6 @@ data class AllowedModel(
             accelerators.add(Accelerator.TPU)
           }
         }
-        // Remove GPU from pixel 10 devices.
         if (isPixel10()) {
           accelerators.remove(Accelerator.GPU)
         }
@@ -191,13 +181,9 @@ data class AllowedModel(
       learnMoreUrl = "https://developers.google.com/ml-kit/terms"
     }
 
-    // Misc.
-    var showBenchmarkButton = true
-    var showRunAgainButton = true
-    if (isLlmModel) {
-      showBenchmarkButton = false
-      showRunAgainButton = false
-    }
+    var showBenchmarkButton = false
+    var showRunAgainButton = false
+
     return Model(
       name = name,
       version = version,
@@ -238,19 +224,16 @@ data class AllowedModel(
   }
 }
 
-/** Specific device requirements grouped by a descriptive name. */
 data class NamedDeviceGroup(
   @SerializedName("groupName") val groupName: String,
   @SerializedName("description") val description: String? = null,
   @SerializedName("deviceModels") val deviceModels: List<String>,
 )
 
-/** Hardware-based constraints for model deployment. */
 data class DeviceRequirements(
   @SerializedName("allowedDeviceGroups") val allowedDeviceGroups: List<NamedDeviceGroup>? = null
 )
 
-/** The model allowlist. */
 data class ModelAllowlist(
   val models: List<AllowedModel>,
   @SerializedName("aicoreRequirements") val aicoreRequirements: DeviceRequirements? = null,

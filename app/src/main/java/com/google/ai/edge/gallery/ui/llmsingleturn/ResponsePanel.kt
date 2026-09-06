@@ -17,7 +17,6 @@
 package com.google.ai.edge.gallery.ui.llmsingleturn
 
 import android.content.ClipData
-import android.util.Log
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
@@ -28,8 +27,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -55,24 +52,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
-import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.BufferedFadingMarkdownText
 import com.google.ai.edge.gallery.ui.common.ScrollToBottomButton
-import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-
-private const val TAG = "AGResponsePanel"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,11 +72,9 @@ fun ResponsePanel(
   task: Task,
   model: Model,
   viewModel: LlmSingleTurnViewModel,
-  modelManagerViewModel: ModelManagerViewModel,
   modifier: Modifier = Modifier,
 ) {
   val uiState by viewModel.uiState.collectAsState()
-  val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val inProgress = uiState.inProgress
   val initializing = uiState.preparing
   val selectedPromptTemplateType = uiState.selectedPromptTemplateType
@@ -92,160 +82,124 @@ fun ResponsePanel(
   var selectedOptionIndex by remember { mutableIntStateOf(0) }
   val clipboard = LocalClipboard.current
   val scope = rememberCoroutineScope()
-  val pagerState =
-    rememberPagerState(initialPage = task.models.indexOf(model), pageCount = { task.models.size })
-  val accelerator = model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = "")
-  val context = LocalContext.current
 
-  // Select the "response" tab when prompt template changes.
   LaunchedEffect(selectedPromptTemplateType) { selectedOptionIndex = 0 }
 
-  // Update selected model and clean up previous model when page is settled on a model page.
-  LaunchedEffect(pagerState.settledPage) {
-    val curSelectedModel = task.models[pagerState.settledPage]
-    Log.d(
-      TAG,
-      "Pager settled on model '${curSelectedModel.name}' from '${model.name}'. Updating selected model.",
-    )
-    if (curSelectedModel.name != model.name) {
-      modelManagerViewModel.cleanupModel(context = context, task = task, model = model)
+  val response =
+    uiState.responsesByModel[model.name]?.get(selectedPromptTemplateType.label) ?: ""
+  val isProcessing = initializing || inProgress
+  val statusText =
+    when {
+      uiState.statusMessage.isNotEmpty() -> uiState.statusMessage
+      initializing -> "Processing…"
+      inProgress -> "Generating…"
+      else -> null
     }
-    modelManagerViewModel.selectModel(curSelectedModel)
-  }
 
-  // Scroll pager when selected model changes.
-  LaunchedEffect(modelManagerUiState.selectedModel) {
-    pagerState.animateScrollToPage(task.models.indexOf(model))
-  }
-
-  HorizontalPager(state = pagerState, userScrollEnabled = false) { pageIndex ->
-    val curPageModel = task.models[pageIndex]
-
-    val response =
-      uiState.responsesByModel[curPageModel.name]?.get(selectedPromptTemplateType.label) ?: ""
-    val isProcessing = initializing || inProgress
-    val statusText =
-      when {
-        uiState.statusMessage.isNotEmpty() -> uiState.statusMessage
-        initializing -> "Processing…"
-        inProgress -> "Generating…"
-        else -> null
+  Box(modifier = modifier.fillMaxSize()) {
+    if (initializing && response.isEmpty()) {
+      Column(modifier = Modifier.fillMaxSize().padding(start = 12.dp, top = 12.dp)) {
+        HpResponseProcessingIndicator(
+          isProcessing = true,
+          statusMessage = statusText,
+        )
       }
-
-    Box(modifier = modifier.fillMaxSize()) {
-      if (initializing && response.isEmpty()) {
+    } else if (response.isEmpty()) {
+      if (isProcessing) {
         Column(modifier = Modifier.fillMaxSize().padding(start = 12.dp, top = 12.dp)) {
           HpResponseProcessingIndicator(
             isProcessing = true,
             statusMessage = statusText,
           )
         }
-      } else if (response.isEmpty()) {
-        if (isProcessing) {
-          Column(modifier = Modifier.fillMaxSize().padding(start = 12.dp, top = 12.dp)) {
-            HpResponseProcessingIndicator(
-              isProcessing = true,
-              statusMessage = statusText,
-            )
-          }
-        } else {
-          Row(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text(
-              "Response will appear here",
-              modifier = Modifier.alpha(0.5f),
-              style = MaterialTheme.typography.labelMedium,
-            )
-          }
-        }
       } else {
-        // Stores if the list is at the scrollable area's bottom.
-        //
-        // It will only be updated when the state holds for at least 500ms to improve user
-        // experience.
-        var isAtBottom by remember { mutableStateOf(true) }
-        LaunchedEffect(responseScrollState) {
-          snapshotFlow {
-              // Read the raw scroll state here
-              !responseScrollState.canScrollForward
-            }
-            .collectLatest { rawAtBottom ->
-              if (!rawAtBottom) {
-                delay(500)
-              }
-              // Update the actual state that drives your AnimatedVisibility
-              isAtBottom = rawAtBottom
-            }
+        Row(
+          modifier = Modifier.fillMaxSize(),
+          horizontalArrangement = Arrangement.Center,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            "Response will appear here",
+            modifier = Modifier.alpha(0.5f),
+            style = MaterialTheme.typography.labelMedium,
+          )
         }
+      }
+    } else {
+      var isAtBottom by remember { mutableStateOf(true) }
+      LaunchedEffect(responseScrollState) {
+        snapshotFlow {
+            !responseScrollState.canScrollForward
+          }
+          .collectLatest { rawAtBottom ->
+            if (!rawAtBottom) {
+              delay(500)
+            }
+            isAtBottom = rawAtBottom
+          }
+      }
 
-        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 4.dp)) {
-          if (selectedOptionIndex == 0) {
-            Box(contentAlignment = Alignment.BottomEnd, modifier = Modifier.weight(1f)) {
-              Column(modifier = Modifier.fillMaxSize().verticalScroll(responseScrollState)) {
-                if (isProcessing) {
-                  HpResponseProcessingIndicator(
-                    isProcessing = true,
-                    statusMessage = statusText,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-                  )
-                }
-                BufferedFadingMarkdownText(
-                  text = response,
-                  inProgress = uiState.inProgress,
-                  modifier =
-                    Modifier.padding(top = 8.dp, bottom = 40.dp).semantics {
-                      // Only announce when message is complete.
-                      if (!inProgress) {
-                        liveRegion = LiveRegionMode.Polite
-                      }
-                    },
+      Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 4.dp)) {
+        if (selectedOptionIndex == 0) {
+          Box(contentAlignment = Alignment.BottomEnd, modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.fillMaxSize().verticalScroll(responseScrollState)) {
+              if (isProcessing) {
+                HpResponseProcessingIndicator(
+                  isProcessing = true,
+                  statusMessage = statusText,
+                  modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                 )
               }
-              // Copy button.
-              IconButton(
-                onClick = {
-                  scope.launch {
-                    val clipData = ClipData.newPlainText("response", response)
-                    val clipEntry = ClipEntry(clipData = clipData)
-                    clipboard.setClipEntry(clipEntry = clipEntry)
-                  }
-                },
-                colors =
-                  IconButtonDefaults.iconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                  ),
-              ) {
-                Icon(
-                  Icons.Outlined.ContentCopy,
-                  contentDescription = stringResource(R.string.cd_copy_to_clipboard_icon),
-                  modifier = Modifier.size(20.dp),
-                )
-              }
-
-              // "Scroll to bottom" button, only shown when the list is not at the bottom.
-              Column(
+              BufferedFadingMarkdownText(
+                text = response,
+                inProgress = uiState.inProgress,
                 modifier =
-                  Modifier.align(alignment = Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(bottom = 0.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-              ) {
-                ScrollToBottomButton(
-                  isAtBottom = isAtBottom,
-                  onClick = {
-                    scope.launch {
-                      responseScrollState.animateScrollTo(
-                        responseScrollState.maxValue,
-                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
-                      )
+                  Modifier.padding(top = 8.dp, bottom = 40.dp).semantics {
+                    if (!inProgress) {
+                      liveRegion = LiveRegionMode.Polite
                     }
                   },
-                )
-              }
+              )
+            }
+            IconButton(
+              onClick = {
+                scope.launch {
+                  val clipData = ClipData.newPlainText("response", response)
+                  val clipEntry = ClipEntry(clipData = clipData)
+                  clipboard.setClipEntry(clipEntry = clipEntry)
+                }
+              },
+              colors =
+                IconButtonDefaults.iconButtonColors(
+                  containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                  contentColor = MaterialTheme.colorScheme.primary,
+                ),
+            ) {
+              Icon(
+                Icons.Outlined.ContentCopy,
+                contentDescription = stringResource(R.string.cd_copy_to_clipboard_icon),
+                modifier = Modifier.size(20.dp),
+              )
+            }
+
+            Column(
+              modifier =
+                Modifier.align(alignment = Alignment.BottomCenter)
+                  .fillMaxWidth()
+                  .padding(bottom = 0.dp),
+              horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+              ScrollToBottomButton(
+                isAtBottom = isAtBottom,
+                onClick = {
+                  scope.launch {
+                    responseScrollState.animateScrollTo(
+                      responseScrollState.maxValue,
+                      animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                    )
+                  }
+                },
+              )
             }
           }
         }

@@ -16,19 +16,16 @@
 
 package com.google.ai.edge.gallery.ui.common
 
-import android.Manifest
 import android.content.ClipData
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
-import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -57,11 +54,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import com.google.ai.edge.gallery.data.Model
-import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.ln
@@ -139,7 +132,6 @@ fun Long.formatToHourMinSecond(): String {
 fun getDistinctiveColor(index: Int): Color {
   val colors =
     listOf(
-      //      Color(0xffe6194b),
       Color(0xff3cb44b),
       Color(0xffffe119),
       Color(0xff4363d8),
@@ -170,45 +162,15 @@ fun Context.createTempPictureUri(
 
   return FileProvider.getUriForFile(
     applicationContext,
-    "com.google.ai.edge.gallery.provider" /* {applicationId}.provider */,
+    "com.google.ai.edge.gallery.provider",
     tempFile,
   )
-}
-
-fun checkNotificationPermissionAndStartDownload(
-  context: Context,
-  launcher: ManagedActivityResultLauncher<String, Boolean>,
-  modelManagerViewModel: ModelManagerViewModel,
-  task: Task?,
-  model: Model,
-) {
-  // Check permission
-  when (PackageManager.PERMISSION_GRANTED) {
-    // Already got permission. Call the lambda.
-    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) -> {
-      modelManagerViewModel.downloadModel(task = task, model = model)
-    }
-
-    // Otherwise, ask for permission
-    else -> {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-      }
-    }
-  }
 }
 
 fun ensureValidFileName(fileName: String): String {
   return fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
 }
 
-/**
- * A composable that animates text appearing to "swipe" into view from left to right.
- *
- * This effect is created by animating a linear gradient brush that colors the text, combined with
- * an alpha animation for fading. The text gradually becomes visible as the gradient moves across
- * it, revealing the full text by the end of the animation.
- */
 @Composable
 fun SwipingText(
   text: String,
@@ -243,20 +205,6 @@ fun SwipingText(
   )
 }
 
-/**
- * A composable that animates the revelation of text using a linear gradient mask.
- *
- * The text appears to "wipe" into view from left to right, controlled by an animation progress.
- * This is achieved by drawing a gradient mask over the text that moves horizontally, revealing the
- * content as the animation progresses.
- *
- * The core of the revelation effect relies on `BlendMode.DstOut`. First, the text content
- * (`drawContent()`) is rendered as the "destination." Then, a rectangle filled with a `maskBrush`
- * (our linear gradient) is drawn as the "source." `DstOut` works by taking the destination (the
- * text) and making transparent any parts that overlap with the opaque (non-transparent) regions of
- * the source (the red part of our mask). As the `maskBrush` animates and slides across the text,
- * the transparent portion of the mask "reveals" the text, creating the wipe-in effect.
- */
 @Composable
 fun RevealingText(
   text: String,
@@ -301,7 +249,6 @@ fun RevealingText(
   }
 }
 
-/** Another version of RevealingText with animationProgress passed in. */
 @Composable
 fun RevealingText(
   text: String,
@@ -339,14 +286,6 @@ fun RevealingText(
   }
 }
 
-/**
- * A reusable Composable function that provides an animated float progress value after an initial
- * delay.
- *
- * This function is ideal for creating "enter" animations that start after a specified pause,
- * allowing for staggered or timed visual effects. It uses `animateFloatAsState` to smoothly
- * transition the progress from 0f to 1f.
- */
 @Composable
 fun rememberDelayedAnimationProgress(
   initialDelay: Long = 0,
