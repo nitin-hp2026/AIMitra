@@ -19,8 +19,6 @@ package com.google.ai.edge.gallery.ui.llmsingleturn
 import android.content.Context
 import androidx.compose.runtime.Composable
 import com.google.ai.edge.gallery.R
-import com.google.ai.edge.gallery.customtasks.common.CustomTask
-import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
@@ -34,6 +32,24 @@ import dagger.multibindings.IntoSet
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
+interface CustomTask {
+  val task: Task
+  fun initializeModelFn(
+    context: Context,
+    coroutineScope: CoroutineScope,
+    model: Model,
+    systemInstruction: Contents?,
+    onDone: (String) -> Unit,
+  )
+  fun cleanUpModelFn(
+    context: Context,
+    coroutineScope: CoroutineScope,
+    model: Model,
+    onDone: () -> Unit,
+  )
+  @Composable fun MainScreen(data: Any)
+}
+
 class LlmSingleTurnTask @Inject constructor() : CustomTask {
   override val task: Task =
     Task(
@@ -43,11 +59,10 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
       icon = null,
       iconVectorResourceId = R.drawable.hp_logo,
       models = mutableListOf(),
-      description = "Single turn use cases with on-device large language models",
+      description = "Single turn use cases (AI Writing, AI Summarize)",
       shortDescription = "Single turn use cases",
-      docUrl = "https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md",
-      sourceCodeUrl =
-        "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt",
+      docUrl = "",
+      sourceCodeUrl = "",
       textInputPlaceHolderRes = R.string.text_input_placeholder_llm_chat,
     )
 
@@ -72,16 +87,11 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
 
   @Composable
   override fun MainScreen(data: Any) {
-    val myData = data as CustomTaskDataForBuiltinTask
-    LlmSingleTurnScreen(
-      modelManagerViewModel = myData.modelManagerViewModel,
-      navigateUp = myData.onNavUp,
-    )
   }
 }
 
 @Module
-@InstallIn(SingletonComponent::class) // Or another component that fits your scope
+@InstallIn(SingletonComponent::class)
 internal object LlmSingleTurnTaskModule {
   @Provides
   @IntoSet

@@ -93,9 +93,6 @@ import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.ui.common.chat.MessageBubbleShape
-import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
-import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.theme.bodyLargeNarrow
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlinx.coroutines.delay
@@ -111,14 +108,12 @@ fun PromptTemplatesPanel(
   task: Task,
   model: Model,
   viewModel: LlmSingleTurnViewModel,
-  modelManagerViewModel: ModelManagerViewModel,
   onSend: () -> Unit,
   onStopButtonClicked: (Model) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val scope = rememberCoroutineScope()
   val uiState by viewModel.uiState.collectAsState()
-  val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val selectedPromptTemplateType = uiState.selectedPromptTemplateType
   val inProgress = uiState.inProgress
   var selectedTabIndex by remember { mutableIntStateOf(0) }
@@ -134,7 +129,6 @@ fun PromptTemplatesPanel(
   val focusManager = LocalFocusManager.current
   val interactionSource = remember { MutableInteractionSource() }
   val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
-  val modelInitializationStatus = modelManagerUiState.modelInitializationStatus[model.name]
 
   // PDF upload state (used by the "Summarize text" template).
   var pdfResult by remember { mutableStateOf<PdfExtractionResult?>(null) }
@@ -182,8 +176,6 @@ fun PromptTemplatesPanel(
 
   val canSend = if (isPdfSummarize) true else curTextInputContent.isNotEmpty()
 
-  // Builds the text sent to the model. Evaluated lazily on send (never during composition) so the
-  // template's input-editor values are guaranteed to be populated first.
   val buildSendText: () -> String = {
     val pdf = pdfResult
     if (isPdfSummarize && pdf != null) {
@@ -206,16 +198,13 @@ fun PromptTemplatesPanel(
   val bubbleBorderRadius = dimensionResource(R.dimen.chat_bubble_corner_radius)
 
   Column(modifier = modifier) {
-    // Scrollable tab row for all prompt templates.
     PrimaryScrollableTabRow(selectedTabIndex = selectedTabIndex) {
       TAB_TITLES.forEachIndexed { index, title ->
         Tab(
           selected = selectedTabIndex == index,
           enabled = !inProgress,
           onClick = {
-            // Clear input when tab changes.
             curTextInputContent = ""
-            // Clear any uploaded PDF.
             pdfResult = null
             pdfMessage = null
 
@@ -238,9 +227,7 @@ fun PromptTemplatesPanel(
       }
     }
 
-    // Content.
     Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-      // Input editor row (horizontally scrollable to fit multiple selectors).
       if (selectedPromptTemplateType.config.inputEditors.isNotEmpty()) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
@@ -259,7 +246,6 @@ fun PromptTemplatesPanel(
                 SingleSelectButton(
                   config = inputEditor as PromptTemplateSingleSelectInputEditor,
                   onSelected = { option -> inputEditorValues[inputEditor.label] = option },
-                  // "Summarize PDF" is only selectable once a PDF has been uploaded.
                   disabledOptions =
                     if (isStyleEditor && pdfResult == null) setOf(SUMMARIZE_PDF_STYLE)
                     else emptySet(),
@@ -272,7 +258,6 @@ fun PromptTemplatesPanel(
         }
       }
 
-      // Uploaded PDF status (Summarize text template only).
       if (isSummarizeTemplate && (pdfResult != null || pdfLoading || pdfMessage != null)) {
         Column(
           modifier =
@@ -328,20 +313,17 @@ fun PromptTemplatesPanel(
         }
       }
 
-      // Text input box.
       Box(contentAlignment = Alignment.BottomCenter, modifier = Modifier.weight(1f)) {
         Column(
           modifier =
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).clickable(
               interactionSource = interactionSource,
-              indication = null, // Disable the ripple effect
+              indication = null,
             ) {
-              // Request focus on the TextField when the Column is clicked
               focusRequester.requestFocus()
             }
         ) {
           if (isSummarizeTemplate && pdfResult != null) {
-            // Content input is collapsed while a PDF is attached: the PDF is the source.
             Text(
               "The uploaded PDF will be summarized. Remove the PDF to type your own text.",
               style = MaterialTheme.typography.bodyMedium,
@@ -350,7 +332,7 @@ fun PromptTemplatesPanel(
                 Modifier.fillMaxWidth()
                   .padding(16.dp)
                   .padding(bottom = 40.dp)
-                  .clip(MessageBubbleShape(radius = bubbleBorderRadius))
+                  .clip(androidx.compose.foundation.shape.RoundedCornerShape(bubbleBorderRadius))
                   .background(MaterialTheme.customColors.agentBubbleBgColor)
                   .padding(16.dp),
             )
@@ -378,7 +360,6 @@ fun PromptTemplatesPanel(
           }
         }
 
-        // Text action row.
         Row(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -386,8 +367,6 @@ fun PromptTemplatesPanel(
         ) {
           Spacer(modifier = Modifier.weight(1f))
 
-          // Add button: for the Summarize template it opens a menu to upload a PDF or insert an
-          // example; for other templates it inserts an example prompt.
           Box {
             OutlinedIconButton(
               enabled = !inProgress,
@@ -436,9 +415,7 @@ fun PromptTemplatesPanel(
             }
           }
 
-          val modelInitializing =
-            modelInitializationStatus?.status == ModelInitializationStatusType.INITIALIZING
-          if (inProgress && !modelInitializing && !uiState.preparing) {
+          if (inProgress && !uiState.preparing) {
             IconButton(
               onClick = { onStopButtonClicked(model) },
               colors =
@@ -454,7 +431,6 @@ fun PromptTemplatesPanel(
               )
             }
           } else {
-            // Send button
             OutlinedIconButton(
               enabled = !inProgress && canSend,
               onClick = {
@@ -464,8 +440,6 @@ fun PromptTemplatesPanel(
                 val passes: List<PipelinePass> =
                   when {
                     isPdfSummarize && pdf != null -> {
-                      // Instant single pass for short PDFs; hierarchical map-reduce only for long
-                      // ones (> 5 pages).
                       val chunks = if (pdf.pagesRead > 5) chunkPdfText(pdf.text) else listOf(pdf.text)
                       if (chunks.size <= 1) {
                         listOf(PipelinePass("") { buildPdfSummaryPrompt(pdf) })
@@ -486,7 +460,6 @@ fun PromptTemplatesPanel(
                         }
                       }
                     }
-                    // Everything else (AI Writing, text summarize, code) is a single streaming pass.
                     else -> {
                       val text = buildSendText()
                       listOf(PipelinePass("") { text })
@@ -537,14 +510,12 @@ fun PromptTemplatesPanel(
       modifier = Modifier.wrapContentHeight(),
     ) {
       Column(modifier = Modifier.padding(bottom = 16.dp)) {
-        // Title
         Text(
           "Select an example",
           modifier = Modifier.fillMaxWidth().padding(16.dp),
           style = MaterialTheme.typography.titleLarge,
         )
 
-        // Examples
         for (prompt in selectedPromptTemplateType.examplePrompts) {
           var textLayoutResultState by remember { mutableStateOf<TextLayoutResult?>(null) }
           val hasOverflow =
@@ -557,7 +528,6 @@ fun PromptTemplatesPanel(
                 .clickable {
                   curTextInputContent = prompt
                   scope.launch {
-                    // Give it sometime to show the click effect.
                     delay(200)
                     showExamplePromptBottomSheet = false
                   }
@@ -627,7 +597,6 @@ fun PromptTemplatesPanel(
   }
 }
 
-/** Word budget scaled by document length (page count). */
 private fun wordBudgetForPages(pages: Int): String =
   when {
     pages <= 2 -> "about 80-120 words"
@@ -637,7 +606,6 @@ private fun wordBudgetForPages(pages: Int): String =
     else -> "about 500-650 words"
   }
 
-/** Tells the model to classify the document and shape the summary to it. */
 private const val DOC_TYPE_GUIDANCE =
   "Classify the document into exactly ONE type from this list: Medical, Machine Learning / AI, " +
     "Science, Finance, Legal, Educational, Technical, Business, News, Resume, Engineering. " +
@@ -653,23 +621,17 @@ private const val DOC_TYPE_GUIDANCE =
     "- News: the who, what, when, where, why and the main points.\n" +
     "- Resume: skills, experience, education, and notable achievements.\n"
 
-/** First output line: visible document-type header the user sees at the top of every summary. */
 private const val DOC_TYPE_HEADER_INSTRUCTION =
   "The VERY FIRST line of your output must be exactly: \"## Summary — <the chosen type>\" " +
     "(use \"Miscellaneous\" if unsure). Example: \"## Summary — Finance\" or " +
     "\"## Summary — Machine Learning / AI\". Then continue with the sections below.\n"
 
-/** Ensures math and structured content render cleanly in the markdown viewer (no raw LaTeX). */
 private const val MATH_FORMAT_GUIDANCE =
   "Formatting rules: render any math, equations or formulas in clean, readable form using Unicode " +
     "symbols (× ÷ √ ≈ ≤ ≥ π ² ³ ₁ ₂ →) and put multi-line or complex formulas inside fenced code " +
     "blocks. Do NOT output raw LaTeX commands (e.g. \\frac, \\sum, \\alpha, \$...\$) — they will not " +
     "render. Keep numbers, units and symbols accurate. Use markdown tables for tabular data.\n"
 
-/**
- * Builds a single-pass, page-count-aware, document-type-aware summarization prompt for a PDF (used
- * for short PDFs so output streams instantly). The source text is capped to fit the context window.
- */
 private fun buildPdfSummaryPrompt(pdf: PdfExtractionResult): String {
   val pages = pdf.pagesRead
   val wordBudget = wordBudgetForPages(pages)
@@ -699,7 +661,6 @@ private fun buildPdfSummaryPrompt(pdf: PdfExtractionResult): String {
 private const val MAX_CHUNK_CHARS = 5000
 private const val MAX_CHUNKS = 6
 
-/** Splits PDF text into paragraph-aligned chunks (bounded to [MAX_CHUNKS]) for map-reduce. */
 private fun chunkPdfText(text: String): List<String> {
   val trimmed = text.trim()
   if (trimmed.length <= MAX_CHUNK_CHARS) return listOf(trimmed)
@@ -726,7 +687,6 @@ private fun chunkPdfText(text: String): List<String> {
   }
   if (current.isNotEmpty()) chunks.add(current.toString().trim())
 
-  // Bound the number of passes: fold any overflow into the last kept chunk.
   if (chunks.size > MAX_CHUNKS) {
     val kept = chunks.take(MAX_CHUNKS - 1).toMutableList()
     val rest = chunks.drop(MAX_CHUNKS - 1).joinToString("\n\n").take(MAX_CHUNK_CHARS * 2)
@@ -736,7 +696,6 @@ private fun chunkPdfText(text: String): List<String> {
   return chunks
 }
 
-/** Map step: summarize one section into concise bullets. */
 private fun buildChunkSummaryPrompt(chunk: String, index: Int, total: Int): String =
   "You are summarizing part $index of $total of a longer document.\n" +
     MATH_FORMAT_GUIDANCE +
@@ -744,7 +703,6 @@ private fun buildChunkSummaryPrompt(chunk: String, index: Int, total: Int): Stri
     "Do not add commentary or a preamble.\n\n" +
     "SECTION $index:\n$chunk"
 
-/** Reduce step: synthesize the section summaries into one final structured summary. */
 private fun buildPdfReducePrompt(pdf: PdfExtractionResult, partialSummaries: List<String>): String {
   val joined = partialSummaries.mapIndexed { i, s -> "Section ${i + 1}:\n$s" }.joinToString("\n\n")
   val wordBudget = wordBudgetForPages(pdf.pagesRead)
